@@ -171,4 +171,4 @@ public function test_with_invalid_response(): void
 
 ## ライセンス
 
-このライブラリは [MITライセンス](LICENSE.md) の下で公開されています。
+このライブラリは [MITライセンス](LICENSE) の下で公開されています。

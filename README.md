@@ -172,4 +172,4 @@ I would like to express my deep gratitude to the author for publishing such a wo
 
 ## License
 
-This library is open-sourced software licensed under the [MIT license](LICENSE.md).
+This library is open-sourced software licensed under the [MIT license](LICENSE).
