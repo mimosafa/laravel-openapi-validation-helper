@@ -161,4 +161,21 @@ class TestCaseHelperTest extends TestCase
         $response->assertStatus(200);
         $response->assertJson(['id' => 1, 'name' => 'Test Name']);
     }
+
+    public function test_path_with_placeholder_is_validated_correctly()
+    {
+        $userId = 456;
+
+        // 1. Set the concrete path with the placeholder resolved.
+        $this->path = '/users/' . $userId;
+        $this->prefix = '/api';
+        $this->operation = HttpRequestMethod::GET;
+
+        // 2. The validation is triggered automatically when the request is made.
+        $response = $this->getJson('/api/users/' . $userId);
+
+        // 3. Assert the result.
+        $response->assertStatus(200);
+        $response->assertJson(['id' => $userId]);
+    }
 }

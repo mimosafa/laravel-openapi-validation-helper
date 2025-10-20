@@ -113,6 +113,27 @@ class ExampleTest extends TestCase
 }
 ```
 
+## How it Works
+
+This library does not perform validation directly. Instead, it delegates the core validation logic to the `league/openapi-psr7-validator` package. The division of responsibilities is as follows:
+
+### The `TestCaseHelper` Trait (This Library)
+
+-   Acts as a **"bridge"**.
+-   It captures the HTTP request and response executed within a Laravel test.
+-   It converts them into the PSR-7 standard format that `league/openapi-psr7-validator` can understand.
+-   During this conversion, it strips any defined prefix (like `/api`) to align the path with the OpenAPI schema.
+-   It then hands over the prepared request and response to the validation engine.
+
+### The `league/openapi-psr7-validator` Package
+
+-   Acts as the **"validation engine"**.
+-   It reads the `openapi.yml` file and fully understands the API specification.
+-   It automatically determines which schema template (e.g., `/users/{id}`) corresponds to the concrete path of the request (e.g., `/users/456`) passed from `TestCaseHelper`.
+-   Based on the matched schema definition, it rigorously checks if the request and response contents (parameters, body, headers, etc.) comply with the specification.
+
+This collaboration allows developers to transparently test for OpenAPI specification compliance simply by writing their Laravel tests as they normally would.
+
 ## API
 
 ### `ignoreRequestCompliance()`

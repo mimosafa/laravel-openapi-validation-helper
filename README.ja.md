@@ -111,6 +111,27 @@ class ExampleTest extends TestCase
 }
 ```
 
+## 役割分担 (How it Works)
+
+このライブラリは、バリデーション処理を直接行うのではなく、コアな検証ロジックを `league/openapi-psr7-validator` パッケージに委譲しています。それぞれの役割は以下の通りです。
+
+### `TestCaseHelper` トレイト (このライブラリ)
+
+- **「橋渡し役」** を担当します。
+- Laravelのテスト内で実行されたHTTPリクエストとレスポンスを捕まえます。
+- それらを `league/openapi-psr7-validator` が理解できるPSR-7標準の形式に変換します。
+- 変換の過程で、`/api` のようなプレフィックスを除去し、OpenAPIスキーマのパスと一致するように調整します。
+- 準備ができたリクエストとレスポンスを、検証エンジン本体である `league/openapi-psr7-validator` に渡します。
+
+### `league/openapi-psr7-validator` パッケージ
+
+- **「検証エンジン本体」** を担当します。
+- `openapi.yml` を読み込み、API仕様を完全に理解します。
+- `TestCaseHelper` から渡されたリクエストの具体的なパス（例: `/users/456`）が、スキーマ上のどのテンプレートパス（例: `/users/{id}`）に該当するかを自動で判断します。
+- 該当したスキーマ定義に基づき、リクエストやレスポンスの内容が仕様通りか厳密にチェックします。
+
+この連携により、開発者はLaravelのテストを普段通り記述するだけで、透過的にOpenAPI仕様の準拠テストを行うことができます。
+
 ## API
 
 ### `ignoreRequestCompliance()`
