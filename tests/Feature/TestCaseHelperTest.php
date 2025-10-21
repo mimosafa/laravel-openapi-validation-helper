@@ -7,38 +7,97 @@ use Illuminate\Support\Facades\Route;
 use LaravelOpenAPIValidationHelper\HttpRequestMethod;
 use LaravelOpenAPIValidationHelper\TestCaseHelper;
 use League\OpenAPIValidation\PSR7\ValidatorBuilder;
+use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
 
+/**
+ * Feature test class for TestCaseHelper.
+ *
+ * This class serves as a sample for the concrete usage of the LaravelOpenAPIValidationHelper\TestCaseHelper trait.
+ * Package users can refer to this test code to understand how to introduce the trait and the role of each method.
+ *
+ * @see \LaravelOpenAPIValidationHelper\TestCaseHelper
+ */
 class TestCaseHelperTest extends TestCase
 {
     use TestCaseHelper;
 
-    protected bool $requestAssertion = true;
-    protected bool $responseAssertion = true;
+    /**
+     * The prefix to bridge the gap between the OpenAPI schema path and the application's routing path.
+     *
+     * Example: If the OpenAPI schema path is `/users/{id}` and
+     *          the application's actual path is `/api/v1/users/{id}`,
+     *          this property should be set to `/api/v1`.
+     *
+     * @var string
+     */
     protected string $prefix = '';
+
+    /**
+     * The OpenAPI schema path for the current test target.
+     *
+     * Specify the path including placeholders (e.g., `/users/{id}`).
+     *
+     * @var string
+     */
     protected string $path = '/users/1';
+
+    /**
+     * The HTTP method for the current test target.
+     *
+     * @var HttpRequestMethod
+     */
     protected HttpRequestMethod $operation = HttpRequestMethod::GET;
 
+    /**
+     * Returns a `ValidatorBuilder` instance loaded with the OpenAPI schema file.
+     *
+     * This method is essential for the `TestCaseHelper` trait to perform validation.
+     * Adjust the path according to the location of your project's `openapi.yml` file.
+     *
+     * @return ValidatorBuilder
+     */
     protected function getValidatorBuilder(): ValidatorBuilder
     {
         return (new ValidatorBuilder)->fromYamlFile(__DIR__ . '/../openapi.yml');
     }
 
+    /**
+     * Passes the prefix to `TestCaseHelper`.
+     *
+     * @return string
+     */
     protected function prefix(): string
     {
         return $this->prefix;
     }
 
+    /**
+     * Passes the schema path to `TestCaseHelper`.
+     *
+     * @return string
+     */
     protected function path(): string
     {
         return $this->path;
     }
 
+    /**
+     * Passes the HTTP method to `TestCaseHelper`.
+     *
+     * @return HttpRequestMethod
+     */
     protected function operation(): HttpRequestMethod
     {
         return $this->operation;
     }
 
+    /**
+     * Test setup.
+     *
+     * Calling `setUpTransparentlyTest()` enables automatic validation of requests and responses.
+     * Dummy routes for testing are also defined here.
+     */
     protected function setUp(): void
     {
         parent::setUp();
@@ -67,7 +126,9 @@ class TestCaseHelperTest extends TestCase
         });
     }
 
-    // Reset properties for each test
+    /**
+     * Resets properties to their initial state after each test execution.
+     */
     protected function tearDown(): void
     {
         $this->requestAssertion = true;
@@ -78,7 +139,8 @@ class TestCaseHelperTest extends TestCase
         parent::tearDown();
     }
 
-    public function test_successful_validation()
+    #[Test]
+    public function successful_validation_on_get_request(): void
     {
         $this->prefix = '';
         $this->operation = HttpRequestMethod::GET;
@@ -89,7 +151,8 @@ class TestCaseHelperTest extends TestCase
         $response->assertJson(['id' => 1, 'name' => 'John Doe']);
     }
 
-    public function test_request_validation_fails()
+    #[Test]
+    public function request_validation_fails_when_required_parameter_is_missing(): void
     {
         $this->prefix = '';
         $this->operation = HttpRequestMethod::POST;
@@ -98,10 +161,11 @@ class TestCaseHelperTest extends TestCase
         $this->expectException(\PHPUnit\Framework\AssertionFailedError::class);
         $this->expectExceptionMessageMatches('/Required property \'name\' must be present in the object/');
 
-        $this->postJson('/users/1', []); // Missing 'name'
+        $this->postJson('/users/1', []); // The 'name' property is required but missing.
     }
 
-    public function test_response_validation_fails()
+    #[Test]
+    public function response_validation_fails_when_response_data_type_is_incorrect(): void
     {
         $this->prefix = '';
         $this->operation = HttpRequestMethod::POST;
@@ -110,10 +174,12 @@ class TestCaseHelperTest extends TestCase
         $this->expectException(\PHPUnit\Framework\AssertionFailedError::class);
         $this->expectExceptionMessageMatches('/Value expected to be \'string\', but \'integer\' given./');
 
+        // 'name' should be a string, but the route returns an integer.
         $this->postJson('/users/1', ['name' => 'Jane Doe', 'invalid_response' => true]);
     }
 
-    public function test_ignore_request_validation()
+    #[Test]
+    public function request_validation_can_be_ignored(): void
     {
         $this->prefix = '';
         $this->operation = HttpRequestMethod::POST;
@@ -122,12 +188,13 @@ class TestCaseHelperTest extends TestCase
         $this->ignoreRequestCompliance();
         $this->ignoreResponseCompliance();
 
-        // This would fail request validation, but it should be ignored.
+        // This would normally fail request validation, but it is disabled by ignoreRequestCompliance().
         $response = $this->postJson('/users/1', []);
         $response->assertStatus(200);
     }
 
-    public function test_ignore_response_validation()
+    #[Test]
+    public function response_validation_can_be_ignored(): void
     {
         $this->prefix = '';
         $this->operation = HttpRequestMethod::POST;
@@ -135,12 +202,13 @@ class TestCaseHelperTest extends TestCase
 
         $this->ignoreResponseCompliance();
 
-        // This would fail response validation, but it should be ignored.
+        // This would normally fail response validation, but it is disabled by ignoreResponseCompliance().
         $response = $this->postJson('/users/1', ['name' => 'Jane Doe', 'invalid_response' => true]);
         $response->assertStatus(200);
     }
 
-    public function test_prefix_handling()
+    #[Test]
+    public function prefix_is_correctly_handled_in_get_request(): void
     {
         $this->prefix = '/api';
         $this->operation = HttpRequestMethod::GET;
@@ -151,7 +219,8 @@ class TestCaseHelperTest extends TestCase
         $response->assertJson(['id' => 123]);
     }
 
-    public function test_successful_post_with_prefix()
+    #[Test]
+    public function successful_validation_on_post_request_with_prefix(): void
     {
         $this->prefix = '/api';
         $this->operation = HttpRequestMethod::POST;
@@ -162,16 +231,18 @@ class TestCaseHelperTest extends TestCase
         $response->assertJson(['id' => 1, 'name' => 'Test Name']);
     }
 
-    public function test_path_with_placeholder_is_validated_correctly()
+    #[Test]
+    public function path_with_placeholder_is_validated_correctly(): void
     {
         $userId = 456;
 
-        // 1. Set the concrete path with the placeholder resolved.
+        // 1. Set the concrete path according to the schema's path definition (`/users/{id}`).
         $this->path = '/users/' . $userId;
         $this->prefix = '/api';
         $this->operation = HttpRequestMethod::GET;
 
-        // 2. The validation is triggered automatically when the request is made.
+        // 2. Send a request to the actual path including the placeholder.
+        //    Validation is automatically performed after the request.
         $response = $this->getJson('/api/users/' . $userId);
 
         // 3. Assert the result.

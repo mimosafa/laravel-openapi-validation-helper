@@ -92,26 +92,6 @@ trait TestCaseHelper
     }
 
     /**
-     * Get the full URI for the request (prefix + path).
-     *
-     * @return string
-     */
-    protected function uri(): string
-    {
-        return $this->prefix() . $this->path();
-    }
-
-    /**
-     * Get the name of the HTTP method.
-     *
-     * @return string
-     */
-    protected function method(): string
-    {
-        return $this->operation()->name;
-    }
-
-    /**
      * Disable request validation for the current test.
      */
     protected function ignoreRequestCompliance(): void
