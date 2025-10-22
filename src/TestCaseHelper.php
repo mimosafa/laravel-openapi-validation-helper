@@ -43,9 +43,14 @@ trait TestCaseHelper
      * This is used to reconcile differences between an application's full request URI and the path defined in the OpenAPI schema.
      * For example, if the application route is '/api/v1/users' and the schema path is '/users', this method should return '/api/v1'.
      *
+     * Override this method in your test class if your application uses a prefix.
+     *
      * @return string The URI prefix, or an empty string if none.
      */
-    abstract protected function prefix(): string;
+    protected function prefix(): string
+    {
+        return '';
+    }
 
     /**
      * Get the OpenAPI schema path for the current operation.
@@ -93,18 +98,74 @@ trait TestCaseHelper
 
     /**
      * Disable request validation for the current test.
+     *
+     * Call this method in a test to skip OpenAPI request validation.
+     * Useful when testing error cases or invalid requests intentionally.
+     *
+     * @return void
      */
-    protected function ignoreRequestCompliance(): void
+    public function ignoreRequestCompliance(): void
     {
         $this->requestAssertion = false;
     }
 
     /**
      * Disable response validation for the current test.
+     *
+     * Call this method in a test to skip OpenAPI response validation.
+     * Useful when testing error responses or incomplete implementations.
+     *
+     * @return void
      */
-    protected function ignoreResponseCompliance(): void
+    public function ignoreResponseCompliance(): void
     {
         $this->responseAssertion = false;
+    }
+
+    /**
+     * Call the given URI with a JSON request.
+     *
+     * This method overrides the parent `json()` method to automatically populate
+     * the HTTP method and URI from `operation()`, `prefix()`, and `path()` methods
+     * when they are not explicitly provided.
+     *
+     * @param string $method HTTP method (defaults to value from `operation()`)
+     * @param string $uri Request URI (defaults to `prefix() . path()`)
+     * @param array $data Request payload
+     * @param array $headers Additional headers
+     * @param int $options JSON encoding options
+     * @return \Illuminate\Testing\TestResponse
+     */
+    #[\Override]
+    public function json($method = '', $uri = '', array $data = [], array $headers = [], $options = 0)
+    {
+        $method = $method ?: $this->operation()->name;
+        $uri = $uri ?: $this->prefix() . $this->path();
+        return parent::json($method, $uri, $data, $headers, $options);
+    }
+
+    /**
+     * Call the given URI and return the Response.
+     *
+     * This method overrides the parent `call()` method to automatically populate
+     * the HTTP method and URI from `operation()`, `prefix()`, and `path()` methods
+     * when they are not explicitly provided.
+     *
+     * @param string $method HTTP method (defaults to value from `operation()`)
+     * @param string $uri Request URI (defaults to `prefix() . path()`)
+     * @param array $parameters Request parameters
+     * @param array $cookies Request cookies
+     * @param array $files Uploaded files
+     * @param array $server Server variables
+     * @param string|null $content Request content
+     * @return \Illuminate\Testing\TestResponse
+     */
+    #[\Override]
+    public function call($method = '', $uri = '', $parameters = [], $cookies = [], $files = [], $server = [], $content = null)
+    {
+        $method = $method ?: $this->operation()->name;
+        $uri = $uri ?: $this->prefix() . $this->path();
+        return parent::call($method, $uri, $parameters, $cookies, $files, $server, $content);
     }
 
     /**

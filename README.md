@@ -25,9 +25,11 @@ composer require mimosafa/laravel-openapi-validation-helper --dev
 
 ## Usage
 
+### Basic Usage
+
 #### 1. Use the Trait
 
-Use the `TestCaseHelper` trait in your base test case (usually `tests/TestCase.php`).
+Use the `TestCaseHelper` trait in your base test case (usually `tests/TestCase.php`) or in individual test classes.
 
 ```php
 // tests/TestCase.php
@@ -46,21 +48,19 @@ abstract class TestCase extends BaseTestCase
 
 #### 2. Call the Setup Method
 
-In the same `tests/TestCase.php`, call `setUpTransparentlyTest()` within the `setUp()` method.
+In your test class's `setUp()` method, call `setUpTransparentlyTest()`.
 
 ```php
-// tests/TestCase.php
-
-    protected function setUp(): void
-    {
-        parent::setUp();
-        $this->setUpTransparentlyTest(); // Call this method
-    }
+protected function setUp(): void
+{
+    parent::setUp();
+    $this->setUpTransparentlyTest(); // Call this method
+}
 ```
 
-#### 3. Implement Abstract Methods
+#### 3. Implement Required Methods
 
-In the test class where you want to perform validation, implement the four abstract methods required to provide validation information. It is often convenient to define properties in the test class and override their values in each test method to set them dynamically.
+Implement the three required abstract methods for validation. It is often convenient to define properties in the test class and override their values in each test method to set them dynamically.
 
 ```php
 // tests/Feature/ExampleTest.php
@@ -74,14 +74,8 @@ use Tests\TestCase;
 class ExampleTest extends TestCase
 {
     // Set these properties in each test method
-    protected string $prefix = '/api';
     protected string $path = '/users/1';
     protected HttpRequestMethod $operation = HttpRequestMethod::GET;
-
-    protected function prefix(): string
-    {
-        return $this->prefix;
-    }
 
     protected function path(): string
     {
@@ -99,16 +93,75 @@ class ExampleTest extends TestCase
         return (new ValidatorBuilder)->fromYamlFile(base_path('tests/openapi.yml'));
     }
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->setUpTransparentlyTest();
+    }
+
     /** @test */
     public function a_user_can_be_retrieved(): void
     {
         // Set properties
-        $this->prefix = '/api';
         $this->path = '/users/1';
         $this->operation = HttpRequestMethod::GET;
 
-        // When the test is run, the response is automatically validated
-        $this->getJson('/api/users/1')->assertStatus(200);
+        // Method and URI can be omitted (automatically retrieved from operation() and path())
+        $response = $this->json();
+        $response->assertStatus(200);
+
+        // Or you can explicitly specify them as before
+        // $response = $this->getJson('/users/1');
+    }
+}
+```
+
+#### 4. When API Prefix is Needed
+
+If your application routes have a prefix like `/api/users`, override the `prefix()` method.
+
+```php
+class ExampleTest extends TestCase
+{
+    protected string $path = '/users/1';
+    protected HttpRequestMethod $operation = HttpRequestMethod::GET;
+
+    // Override the method to return the prefix
+    protected function prefix(): string
+    {
+        return '/api';
+    }
+
+    protected function path(): string
+    {
+        return $this->path;
+    }
+
+    protected function operation(): HttpRequestMethod
+    {
+        return $this->operation;
+    }
+
+    protected function getValidatorBuilder(): ValidatorBuilder
+    {
+        return (new ValidatorBuilder)->fromYamlFile(base_path('tests/openapi.yml'));
+    }
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->setUpTransparentlyTest();
+    }
+
+    /** @test */
+    public function a_user_can_be_retrieved(): void
+    {
+        $this->path = '/users/1';
+        $this->operation = HttpRequestMethod::GET;
+
+        // Request to /api/users/1, validated against schema /users/{id}
+        $response = $this->json();
+        $response->assertStatus(200);
     }
 }
 ```
@@ -136,7 +189,57 @@ This collaboration allows developers to transparently test for OpenAPI specifica
 
 ## API
 
-### `ignoreRequestCompliance()`
+### Required Methods
+
+#### `path(): string`
+
+Returns the OpenAPI schema path for the current test.
+
+```php
+protected function path(): string
+{
+    return '/users/{id}'; // or a concrete value like '/users/1'
+}
+```
+
+#### `operation(): HttpRequestMethod`
+
+Returns the HTTP method to validate for the current test.
+
+```php
+protected function operation(): HttpRequestMethod
+{
+    return HttpRequestMethod::GET;
+}
+```
+
+#### `getValidatorBuilder(): ValidatorBuilder`
+
+Returns a `ValidatorBuilder` instance loaded with your OpenAPI schema.
+
+```php
+protected function getValidatorBuilder(): ValidatorBuilder
+{
+    return (new ValidatorBuilder)->fromYamlFile(base_path('tests/openapi.yml'));
+}
+```
+
+### Optional Methods
+
+#### `prefix(): string`
+
+Returns the application's routing prefix. Defaults to an empty string. Override this method only if your application uses a prefix.
+
+```php
+protected function prefix(): string
+{
+    return '/api'; // Default is '' (empty string)
+}
+```
+
+### Validation Control Methods
+
+#### `ignoreRequestCompliance()`
 
 Temporarily disables request validation for the current test.
 
@@ -150,7 +253,7 @@ public function test_with_invalid_request(): void
 }
 ```
 
-### `ignoreResponseCompliance()`
+#### `ignoreResponseCompliance()`
 
 Temporarily disables response validation for the current test.
 
@@ -162,6 +265,35 @@ public function test_with_invalid_response(): void
     // Response validation will not run
     $this->postJson('/api/users', ['generate_invalid_response' => true]);
 }
+```
+
+### HTTP Request Methods
+
+The `TestCaseHelper` trait overrides the `json()` and `call()` methods to automatically set default values when arguments are omitted.
+
+#### `json($method = '', $uri = '', array $data = [], array $headers = [], $options = 0)`
+
+When HTTP method and URI are omitted, they are automatically retrieved from `operation()` and `prefix() . path()`.
+
+```php
+// Shorthand (recommended)
+$this->json(); // Uses operation() and prefix() . path()
+
+// Explicit specification also possible
+$this->json('GET', '/api/users/1');
+$this->getJson('/api/users/1'); // Traditional usage still works
+```
+
+#### `call($method = '', $uri = '', $parameters = [], $cookies = [], $files = [], $server = [], $content = null)`
+
+Like `json()`, HTTP method and URI are automatically set to default values when omitted.
+
+```php
+// Shorthand
+$this->call(); // Uses operation() and prefix() . path()
+
+// Explicit specification also possible
+$this->call('POST', '/api/users', ['name' => 'John']);
 ```
 
 ## Acknowledgements

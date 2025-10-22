@@ -1,14 +1,14 @@
 <?php
 
-namespace Tests\Feature;
+namespace Tests;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use LaravelOpenAPIValidationHelper\HttpRequestMethod;
 use LaravelOpenAPIValidationHelper\TestCaseHelper;
 use League\OpenAPIValidation\PSR7\ValidatorBuilder;
+use Orchestra\Testbench\TestCase;
 use PHPUnit\Framework\Attributes\Test;
-use Tests\TestCase;
 
 /**
  * Feature test class for TestCaseHelper.
@@ -21,17 +21,6 @@ use Tests\TestCase;
 class TestCaseHelperTest extends TestCase
 {
     use TestCaseHelper;
-
-    /**
-     * The prefix to bridge the gap between the OpenAPI schema path and the application's routing path.
-     *
-     * Example: If the OpenAPI schema path is `/users/{id}` and
-     *          the application's actual path is `/api/v1/users/{id}`,
-     *          this property should be set to `/api/v1`.
-     *
-     * @var string
-     */
-    protected string $prefix = '';
 
     /**
      * The OpenAPI schema path for the current test target.
@@ -50,6 +39,19 @@ class TestCaseHelperTest extends TestCase
     protected HttpRequestMethod $operation = HttpRequestMethod::GET;
 
     /**
+     * The prefix to bridge the gap between the OpenAPI schema path and the application's routing path.
+     *
+     * Example: If the OpenAPI schema path is `/users/{id}` and
+     *          the application's actual path is `/api/v1/users/{id}`,
+     *          this property should be set to `/api/v1`.
+     *
+     * This is optional and only needs to be overridden when a prefix is required.
+     *
+     * @var string|null
+     */
+    protected ?string $prefixOverride = null;
+
+    /**
      * Returns a `ValidatorBuilder` instance loaded with the OpenAPI schema file.
      *
      * This method is essential for the `TestCaseHelper` trait to perform validation.
@@ -59,17 +61,19 @@ class TestCaseHelperTest extends TestCase
      */
     protected function getValidatorBuilder(): ValidatorBuilder
     {
-        return (new ValidatorBuilder)->fromYamlFile(__DIR__ . '/../openapi.yml');
+        return (new ValidatorBuilder)->fromYamlFile(__DIR__ . '/openapi.yml');
     }
 
     /**
      * Passes the prefix to `TestCaseHelper`.
      *
+     * Override the default empty string when a prefix is needed.
+     *
      * @return string
      */
     protected function prefix(): string
     {
-        return $this->prefix;
+        return $this->prefixOverride ?? '';
     }
 
     /**
@@ -133,7 +137,7 @@ class TestCaseHelperTest extends TestCase
     {
         $this->requestAssertion = true;
         $this->responseAssertion = true;
-        $this->prefix = '';
+        $this->prefixOverride = null;
         $this->path = '/users/1';
         $this->operation = HttpRequestMethod::GET;
         parent::tearDown();
@@ -142,7 +146,6 @@ class TestCaseHelperTest extends TestCase
     #[Test]
     public function successful_validation_on_get_request(): void
     {
-        $this->prefix = '';
         $this->operation = HttpRequestMethod::GET;
         $this->path = '/users/1';
 
@@ -154,7 +157,6 @@ class TestCaseHelperTest extends TestCase
     #[Test]
     public function request_validation_fails_when_required_parameter_is_missing(): void
     {
-        $this->prefix = '';
         $this->operation = HttpRequestMethod::POST;
         $this->path = '/users/1';
 
@@ -167,7 +169,6 @@ class TestCaseHelperTest extends TestCase
     #[Test]
     public function response_validation_fails_when_response_data_type_is_incorrect(): void
     {
-        $this->prefix = '';
         $this->operation = HttpRequestMethod::POST;
         $this->path = '/users/1';
 
@@ -181,7 +182,6 @@ class TestCaseHelperTest extends TestCase
     #[Test]
     public function request_validation_can_be_ignored(): void
     {
-        $this->prefix = '';
         $this->operation = HttpRequestMethod::POST;
         $this->path = '/users/1';
 
@@ -196,7 +196,6 @@ class TestCaseHelperTest extends TestCase
     #[Test]
     public function response_validation_can_be_ignored(): void
     {
-        $this->prefix = '';
         $this->operation = HttpRequestMethod::POST;
         $this->path = '/users/1';
 
@@ -210,7 +209,7 @@ class TestCaseHelperTest extends TestCase
     #[Test]
     public function prefix_is_correctly_handled_in_get_request(): void
     {
-        $this->prefix = '/api';
+        $this->prefixOverride = '/api';
         $this->operation = HttpRequestMethod::GET;
         $this->path = '/users/123';
 
@@ -222,7 +221,7 @@ class TestCaseHelperTest extends TestCase
     #[Test]
     public function successful_validation_on_post_request_with_prefix(): void
     {
-        $this->prefix = '/api';
+        $this->prefixOverride = '/api';
         $this->operation = HttpRequestMethod::POST;
         $this->path = '/users/1';
 
@@ -238,7 +237,7 @@ class TestCaseHelperTest extends TestCase
 
         // 1. Set the concrete path according to the schema's path definition (`/users/{id}`).
         $this->path = '/users/' . $userId;
-        $this->prefix = '/api';
+        $this->prefixOverride = '/api';
         $this->operation = HttpRequestMethod::GET;
 
         // 2. Send a request to the actual path including the placeholder.
@@ -248,5 +247,55 @@ class TestCaseHelperTest extends TestCase
         // 3. Assert the result.
         $response->assertStatus(200);
         $response->assertJson(['id' => $userId]);
+    }
+
+    #[Test]
+    public function json_method_uses_default_values_when_arguments_are_omitted(): void
+    {
+        $this->operation = HttpRequestMethod::GET;
+        $this->path = '/users/1';
+
+        // Method and URI are omitted, automatically retrieved from operation() and prefix() . path()
+        $response = $this->json();
+        $response->assertStatus(200);
+        $response->assertJson(['id' => 1, 'name' => 'John Doe']);
+    }
+
+    #[Test]
+    public function json_method_with_prefix_uses_default_values_when_arguments_are_omitted(): void
+    {
+        $this->prefixOverride = '/api';
+        $this->operation = HttpRequestMethod::POST;
+        $this->path = '/users/1';
+
+        // Method and URI are automatically set to POST and /api/users/1
+        $response = $this->json(data: ['name' => 'Auto Name']);
+        $response->assertStatus(200);
+        $response->assertJson(['id' => 1, 'name' => 'Auto Name']);
+    }
+
+    #[Test]
+    public function call_method_uses_default_values_when_arguments_are_omitted(): void
+    {
+        $this->operation = HttpRequestMethod::GET;
+        $this->path = '/users/1';
+
+        // Method and URI are omitted
+        $response = $this->call();
+        $response->assertStatus(200);
+        $response->assertJson(['id' => 1, 'name' => 'John Doe']);
+    }
+
+    #[Test]
+    public function prefix_defaults_to_empty_string_when_not_overridden(): void
+    {
+        // This test verifies that prefix() returns an empty string by default
+        $this->prefixOverride = null; // Explicitly not setting a prefix
+        $this->operation = HttpRequestMethod::GET;
+        $this->path = '/users/999';
+
+        $response = $this->getJson('/users/999');
+        $response->assertStatus(200);
+        $response->assertJson(['id' => 999]);
     }
 }

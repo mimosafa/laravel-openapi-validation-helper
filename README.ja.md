@@ -23,9 +23,11 @@ composer require mimosafa/laravel-openapi-validation-helper --dev
 
 ## 使用方法
 
+### 基本的な使い方
+
 #### 1. トレイトの利用
 
-ベースとなるテストケース（通常は `tests/TestCase.php`）で `TestCaseHelper` トレイトを `use` します。
+ベースとなるテストケース（通常は `tests/TestCase.php`）または個別のテストクラスで `TestCaseHelper` トレイトを `use` します。
 
 ```php
 // tests/TestCase.php
@@ -44,21 +46,19 @@ abstract class TestCase extends BaseTestCase
 
 #### 2. セットアップメソッドの呼び出し
 
-同じく `tests/TestCase.php` の `setUp()` メソッド内で、`setUpTransparentlyTest()` を呼び出します。
+テストクラスの `setUp()` メソッド内で、`setUpTransparentlyTest()` を呼び出します。
 
 ```php
-// tests/TestCase.php
-
-    protected function setUp(): void
-    {
-        parent::setUp();
-        $this->setUpTransparentlyTest(); // このメソッドを呼び出す
-    }
+protected function setUp(): void
+{
+    parent::setUp();
+    $this->setUpTransparentlyTest(); // このメソッドを呼び出す
+}
 ```
 
-#### 3. 抽象メソッドの実装
+#### 3. 必須メソッドの実装
 
-バリデーションを実行したいテストクラスで、バリデーションに必要な4つの抽象メソッドを実装します。多くの場合、テストクラスにプロパティを定義し、各テストメソッドでその値を上書きすることで、動的に設定するのが便利です。
+バリデーションに必要な3つの抽象メソッドを実装します。多くの場合、テストクラスにプロパティを定義し、各テストメソッドでその値を上書きすることで、動的に設定するのが便利です。
 
 ```php
 // tests/Feature/ExampleTest.php
@@ -72,14 +72,8 @@ use Tests\TestCase;
 class ExampleTest extends TestCase
 {
     // これらのプロパティを各テストメソッドで設定する
-    protected string $prefix = '/api';
     protected string $path = '/users/1';
     protected HttpRequestMethod $operation = HttpRequestMethod::GET;
-
-    protected function prefix(): string
-    {
-        return $this->prefix;
-    }
 
     protected function path(): string
     {
@@ -97,16 +91,75 @@ class ExampleTest extends TestCase
         return (new ValidatorBuilder)->fromYamlFile(base_path('tests/openapi.yml'));
     }
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->setUpTransparentlyTest();
+    }
+
     /** @test */
     public function a_user_can_be_retrieved(): void
     {
         // プロパティを設定
-        $this->prefix = '/api';
         $this->path = '/users/1';
         $this->operation = HttpRequestMethod::GET;
 
-        // テストを実行すると、レスポンスが自動的に検証される
-        $this->getJson('/api/users/1')->assertStatus(200);
+        // メソッドとURIを省略可能（自動的に operation() と path() から取得）
+        $response = $this->json();
+        $response->assertStatus(200);
+
+        // または従来通り明示的に指定することも可能
+        // $response = $this->getJson('/users/1');
+    }
+}
+```
+
+#### 4. APIプレフィックスが必要な場合
+
+アプリケーションのルートが `/api/users` のようにプレフィックスを持つ場合は、`prefix()` メソッドをオーバーライドします。
+
+```php
+class ExampleTest extends TestCase
+{
+    protected string $path = '/users/1';
+    protected HttpRequestMethod $operation = HttpRequestMethod::GET;
+
+    // プレフィックスを返すメソッドをオーバーライド
+    protected function prefix(): string
+    {
+        return '/api';
+    }
+
+    protected function path(): string
+    {
+        return $this->path;
+    }
+
+    protected function operation(): HttpRequestMethod
+    {
+        return $this->operation;
+    }
+
+    protected function getValidatorBuilder(): ValidatorBuilder
+    {
+        return (new ValidatorBuilder)->fromYamlFile(base_path('tests/openapi.yml'));
+    }
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->setUpTransparentlyTest();
+    }
+
+    /** @test */
+    public function a_user_can_be_retrieved(): void
+    {
+        $this->path = '/users/1';
+        $this->operation = HttpRequestMethod::GET;
+
+        // /api/users/1 にリクエストされ、スキーマは /users/{id} と照合される
+        $response = $this->json();
+        $response->assertStatus(200);
     }
 }
 ```
@@ -134,7 +187,57 @@ class ExampleTest extends TestCase
 
 ## API
 
-### `ignoreRequestCompliance()`
+### 必須メソッド
+
+#### `path(): string`
+
+現在のテストで検証するOpenAPIスキーマのパスを返します。
+
+```php
+protected function path(): string
+{
+    return '/users/{id}'; // または具体的な値 '/users/1'
+}
+```
+
+#### `operation(): HttpRequestMethod`
+
+現在のテストで検証するHTTPメソッドを返します。
+
+```php
+protected function operation(): HttpRequestMethod
+{
+    return HttpRequestMethod::GET;
+}
+```
+
+#### `getValidatorBuilder(): ValidatorBuilder`
+
+OpenAPIスキーマを読み込んだ `ValidatorBuilder` インスタンスを返します。
+
+```php
+protected function getValidatorBuilder(): ValidatorBuilder
+{
+    return (new ValidatorBuilder)->fromYamlFile(base_path('tests/openapi.yml'));
+}
+```
+
+### オプショナルメソッド
+
+#### `prefix(): string`
+
+アプリケーションのルーティングプレフィックスを返します。デフォルトは空文字です。プレフィックスが必要な場合のみオーバーライドしてください。
+
+```php
+protected function prefix(): string
+{
+    return '/api'; // デフォルトは '' (空文字)
+}
+```
+
+### バリデーション制御メソッド
+
+#### `ignoreRequestCompliance()`
 
 現在のテストにおいて、リクエストのバリデーションを一時的に無効化します。
 
@@ -148,7 +251,7 @@ public function test_with_invalid_request(): void
 }
 ```
 
-### `ignoreResponseCompliance()`
+#### `ignoreResponseCompliance()`
 
 現在のテストにおいて、レスポンスのバリデーションを一時的に無効化します。
 
@@ -161,6 +264,35 @@ public function test_with_invalid_response(): void
     // レスポンスバリデーションは実行されない
     $this->postJson('/api/users', ['generate_invalid_response' => true]);
 }
+```
+
+### HTTPリクエストメソッド
+
+`TestCaseHelper` トレイトは `json()` と `call()` メソッドをオーバーライドし、引数を省略した場合に自動的にデフォルト値を設定します。
+
+#### `json($method = '', $uri = '', array $data = [], array $headers = [], $options = 0)`
+
+HTTP メソッドと URI を省略すると、`operation()` と `prefix() . path()` から自動取得されます。
+
+```php
+// 省略形（推奨）
+$this->json(); // operation() と prefix() . path() を使用
+
+// 明示的な指定も可能
+$this->json('GET', '/api/users/1');
+$this->getJson('/api/users/1'); // これも従来通り使用可能
+```
+
+#### `call($method = '', $uri = '', $parameters = [], $cookies = [], $files = [], $server = [], $content = null)`
+
+`json()` と同様に、HTTP メソッドと URI を省略すると自動的にデフォルト値が設定されます。
+
+```php
+// 省略形
+$this->call(); // operation() と prefix() . path() を使用
+
+// 明示的な指定も可能
+$this->call('POST', '/api/users', ['name' => 'John']);
 ```
 
 ## 謝辞 (Acknowledgements)
